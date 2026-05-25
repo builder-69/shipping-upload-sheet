@@ -6,16 +6,15 @@ from __future__ import annotations
 import logging
 import shutil
 import sys
-import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Callable
+from uuid import uuid4
 
 import pandas as pd
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
-from starlette.background import BackgroundTask
+from fastapi.responses import FileResponse, JSONResponse
 
 try:
     from .ably_parser import parse_ably_orders
@@ -54,6 +53,9 @@ app.add_middleware(
 )
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
+BACKEND_DIR = Path(__file__).resolve().parent
+TEMP_DIR = BACKEND_DIR / "temp"
+OUTPUT_DIR = BACKEND_DIR / "outputs"
 
 
 def _empty_parsed_orders() -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -100,10 +102,12 @@ def generate_orders(
 
 
 async def _save_upload(upload: UploadFile, destination: Path) -> None:
-    with destination.open("wb") as output_file:
-        while chunk := await upload.read(1024 * 1024):
-            output_file.write(chunk)
-    await upload.close()
+    try:
+        with destination.open("wb") as output_file:
+            while chunk := await upload.read(1024 * 1024):
+                output_file.write(chunk)
+    finally:
+        await upload.close()
 
 
 @app.get("/", include_in_schema=False)
@@ -116,22 +120,29 @@ async def legacy_frontend() -> FileResponse:
     return FileResponse(FRONTEND_DIR / "index.html")
 
 
-@app.post("/api/generate")
+@app.post("/api/generate", response_model=None)
 async def generate_shipping_excel(
     naver_file: Annotated[UploadFile | None, File()] = None,
     hyber_file: Annotated[UploadFile | None, File()] = None,
     ably_file: Annotated[UploadFile | None, File()] = None,
-) -> FileResponse:
+) -> FileResponse | JSONResponse:
     uploads = {
         "naver": naver_file,
         "hyber": hyber_file,
         "ably": ably_file,
     }
     if not any(uploads.values()):
-        raise HTTPException(status_code=400, detail="최소 1개의 주문서 파일을 업로드해주세요.")
+        return JSONResponse(
+            status_code=400,
+            content={"message": "최소 1개의 주문서 파일을 업로드해주세요."},
+        )
 
-    temp_dir = Path(tempfile.mkdtemp(prefix="shipping_upload_"))
+    request_id = uuid4().hex
+    temp_dir = TEMP_DIR / request_id
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     saved_paths: dict[str, Path | None] = {"naver": None, "hyber": None, "ably": None}
+    output_path: Path | None = None
 
     try:
         for platform, upload in uploads.items():
@@ -142,8 +153,8 @@ async def generate_shipping_excel(
             await _save_upload(upload, saved_path)
             saved_paths[platform] = saved_path
 
-        filename = f"통합주문서_{datetime.now():%Y%m%d}.xlsx"
-        output_path = temp_dir / filename
+        filename = f"통합주문서_{datetime.now():%Y%m%d_%H%M%S}_{request_id[:8]}.xlsx"
+        output_path = OUTPUT_DIR / filename
         counts = generate_orders(
             saved_paths["naver"],
             saved_paths["hyber"],
@@ -151,12 +162,15 @@ async def generate_shipping_excel(
             output_path,
         )
     except Exception as exc:
-        shutil.rmtree(temp_dir, ignore_errors=True)
+        if output_path and output_path.exists():
+            output_path.unlink()
         logger.exception("Failed to generate the integrated order sheet")
-        raise HTTPException(
+        return JSONResponse(
             status_code=400,
-            detail=f"주문서 처리 중 오류가 발생했습니다: {exc}",
-        ) from exc
+            content={"message": f"주문서 처리 중 오류가 발생했습니다: {exc}"},
+        )
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
 
     return FileResponse(
         path=output_path,
@@ -168,7 +182,6 @@ async def generate_shipping_excel(
             "X-Hyber-Orders": str(counts["hyber"]),
             "X-Ably-Orders": str(counts["ably"]),
         },
-        background=BackgroundTask(shutil.rmtree, temp_dir, ignore_errors=True),
     )
 
 

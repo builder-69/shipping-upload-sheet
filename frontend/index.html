@@ -246,7 +246,7 @@
       const response = await fetch(API_URL, { method: "POST", body: form });
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
-        throw new Error(body.detail || "통합주문서 생성에 실패했습니다.");
+        throw new Error(body.message || body.detail || "통합주문서 생성에 실패했습니다.");
       }
       if (resultUrl) URL.revokeObjectURL(resultUrl);
       resultUrl = URL.createObjectURL(await response.blob());
