@@ -63,10 +63,11 @@
     color: white;
     font-size: 12px;
   }
-  .upload-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .upload-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
   .upload {
     position: relative;
-    min-height: 138px;
+    min-width: 0;
+    height: 138px;
     padding: 24px 14px 14px;
     border: 2px dashed var(--border-strong);
     border-radius: var(--radius);
@@ -86,6 +87,7 @@
   .shop { margin-bottom: 8px; font-size: 14px; font-weight: 700; }
   .hint { color: var(--muted); font-size: 12px; }
   .filename {
+    width: 100%;
     min-height: 18px;
     margin-top: 12px;
     overflow: hidden;
