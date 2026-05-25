@@ -88,6 +88,7 @@ def create_integrated_order_excel(
         hyber_converted,
         ably_converted
     ], ignore_index=True)
+    integrated_df = integrated_df.fillna('').replace(r'(?i)^\s*nan\s*$', '', regex=True)
     
     # 엑셀 파일 생성
     with pd.ExcelWriter(output_path, engine='openpyxl', date_format='YYYY-MM-DD HH:MM:SS', datetime_format='YYYY-MM-DD HH:MM:SS') as writer:
