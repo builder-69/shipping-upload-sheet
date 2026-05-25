@@ -8,6 +8,7 @@ import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Annotated, Callable
 from uuid import uuid4
 
@@ -19,11 +20,13 @@ from fastapi.responses import FileResponse, JSONResponse
 try:
     from .ably_parser import parse_ably_orders
     from .excel_writer import create_integrated_order_excel
+    from .file_prepare import prepare_hyber_order_file, prepare_naver_order_file
     from .hyber_parser import parse_hyber_orders
     from .naver_parser import parse_naver_orders
 except ImportError:
     from ably_parser import parse_ably_orders
     from excel_writer import create_integrated_order_excel
+    from file_prepare import prepare_hyber_order_file, prepare_naver_order_file
     from hyber_parser import parse_hyber_orders
     from naver_parser import parse_naver_orders
 
@@ -52,7 +55,6 @@ app.add_middleware(
     expose_headers=["Content-Disposition", "X-Total-Orders", "X-Naver-Orders", "X-Hyber-Orders", "X-Ably-Orders"],
 )
 
-FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 BACKEND_DIR = Path(__file__).resolve().parent
 TEMP_DIR = BACKEND_DIR / "temp"
 OUTPUT_DIR = BACKEND_DIR / "outputs"
@@ -78,19 +80,26 @@ def generate_orders(
     output_path: Path,
 ) -> dict[str, int]:
     """Run the existing parsers and Excel writer without changing their mappings."""
-    naver_converted, naver_original = _parse_or_empty(naver_path, parse_naver_orders)
-    hyber_converted, hyber_original = _parse_or_empty(hyber_path, parse_hyber_orders)
-    ably_converted, ably_original = _parse_or_empty(ably_path, parse_ably_orders)
+    with TemporaryDirectory(prefix="shipping-upload-prepared-") as prepared_dir:
+        preparation_dir = Path(prepared_dir)
+        if naver_path is not None:
+            naver_path = prepare_naver_order_file(naver_path, preparation_dir / "naver")
+        if hyber_path is not None:
+            hyber_path = prepare_hyber_order_file(hyber_path, preparation_dir / "hyber")
 
-    create_integrated_order_excel(
-        naver_converted,
-        naver_original,
-        hyber_converted,
-        hyber_original,
-        ably_converted,
-        ably_original,
-        str(output_path),
-    )
+        naver_converted, naver_original = _parse_or_empty(naver_path, parse_naver_orders)
+        hyber_converted, hyber_original = _parse_or_empty(hyber_path, parse_hyber_orders)
+        ably_converted, ably_original = _parse_or_empty(ably_path, parse_ably_orders)
+
+        create_integrated_order_excel(
+            naver_converted,
+            naver_original,
+            hyber_converted,
+            hyber_original,
+            ably_converted,
+            ably_original,
+            str(output_path),
+        )
 
     counts = {
         "naver": len(naver_converted),
@@ -111,13 +120,8 @@ async def _save_upload(upload: UploadFile, destination: Path) -> None:
 
 
 @app.get("/", include_in_schema=False)
-async def frontend() -> FileResponse:
-    return FileResponse(FRONTEND_DIR / "index.html")
-
-
-@app.get("/lotte_shipping_web.html", include_in_schema=False)
-async def legacy_frontend() -> FileResponse:
-    return FileResponse(FRONTEND_DIR / "index.html")
+async def root() -> dict[str, str]:
+    return {"message": "Shipping Upload Sheet API is running."}
 
 
 @app.post("/api/generate", response_model=None)
