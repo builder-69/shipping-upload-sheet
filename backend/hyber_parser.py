@@ -23,15 +23,15 @@ def parse_hyber_orders(file_path):
     # K(10): 상품명, L(11): 옵션정보, P(15): 수량, W(22): 배송시 요청사항
     
     df_converted = pd.DataFrame({
-        '주문번호': df_original.iloc[:, 2].astype(str),      # C열
-        '받는사람': df_original.iloc[:, 18].astype(str),     # S열
-        '전화번호1': df_original.iloc[:, 19].astype(str),    # T열
-        '우편번호': df_original.iloc[:, 20].astype(str),     # U열
-        '주소': df_original.iloc[:, 21].astype(str),         # V열
-        '상품명1': df_original.iloc[:, 10].astype(str),      # K열
-        '상품상세1': df_original.iloc[:, 11].astype(str),    # L열
+        '주문번호': df_original.iloc[:, 2].fillna('').astype(str),      # C열
+        '받는사람': df_original.iloc[:, 18].fillna('').astype(str),     # S열
+        '전화번호1': df_original.iloc[:, 19].fillna('').astype(str),    # T열
+        '우편번호': df_original.iloc[:, 20].fillna('').astype(str),     # U열
+        '주소': df_original.iloc[:, 21].fillna('').astype(str),         # V열
+        '상품명1': df_original.iloc[:, 10].fillna('').astype(str),      # K열
+        '상품상세1': df_original.iloc[:, 11].fillna('').astype(str),    # L열
         '내품수량1': df_original.iloc[:, 15],                # P열
-        '배송메시지': df_original.iloc[:, 22].astype(str),   # W열
+        '배송메시지': df_original.iloc[:, 22].fillna('').astype(str),   # W열
         '수량(A타입)': 1                                     # 고정값
     })
     

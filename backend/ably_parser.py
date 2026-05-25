@@ -23,15 +23,15 @@ def parse_ably_orders(file_path):
     # G(6): 상품명, I(8): 옵션 정보, J(9): 수량, R(17): 배송 메모
     
     df_converted = pd.DataFrame({
-        '주문번호': df_original.iloc[:, 2].astype(str),      # C열
-        '받는사람': df_original.iloc[:, 13].astype(str),     # N열
-        '전화번호1': df_original.iloc[:, 14].astype(str),    # O열
-        '우편번호': df_original.iloc[:, 15].astype(str),     # P열
-        '주소': df_original.iloc[:, 16].astype(str),         # Q열
-        '상품명1': df_original.iloc[:, 6].astype(str),       # G열
-        '상품상세1': df_original.iloc[:, 8].astype(str),     # I열
+        '주문번호': df_original.iloc[:, 2].fillna('').astype(str),      # C열
+        '받는사람': df_original.iloc[:, 13].fillna('').astype(str),     # N열
+        '전화번호1': df_original.iloc[:, 14].fillna('').astype(str),    # O열
+        '우편번호': df_original.iloc[:, 15].fillna('').astype(str),     # P열
+        '주소': df_original.iloc[:, 16].fillna('').astype(str),         # Q열
+        '상품명1': df_original.iloc[:, 6].fillna('').astype(str),       # G열
+        '상품상세1': df_original.iloc[:, 8].fillna('').astype(str),     # I열
         '내품수량1': df_original.iloc[:, 9],                 # J열
-        '배송메시지': df_original.iloc[:, 17].astype(str),   # R열
+        '배송메시지': df_original.iloc[:, 17].fillna('').astype(str),   # R열
         '수량(A타입)': 1                                     # 고정값
     })
     
