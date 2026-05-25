@@ -6,6 +6,7 @@ from __future__ import annotations
 import logging
 import shutil
 import sys
+import unicodedata
 from datetime import datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -58,6 +59,7 @@ app.add_middleware(
 BACKEND_DIR = Path(__file__).resolve().parent
 TEMP_DIR = BACKEND_DIR / "temp"
 OUTPUT_DIR = BACKEND_DIR / "outputs"
+PLATFORM_LABELS = {"naver": "네이버", "hyber": "하이버", "ably": "에이블리"}
 
 
 def _empty_parsed_orders() -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -119,6 +121,17 @@ async def _save_upload(upload: UploadFile, destination: Path) -> None:
         await upload.close()
 
 
+def _detect_platform(filename: str) -> str | None:
+    filename = unicodedata.normalize("NFC", filename)
+    if "스마트스토어" in filename or "네이버" in filename:
+        return "naver"
+    if "배송준비" in filename or "하이버" in filename:
+        return "hyber"
+    if "에이블리" in filename:
+        return "ably"
+    return None
+
+
 @app.get("/", include_in_schema=False)
 async def root() -> dict[str, str]:
     return {"message": "Shipping Upload Sheet API is running."}
@@ -149,13 +162,29 @@ async def generate_shipping_excel(
     output_path: Path | None = None
 
     try:
-        for platform, upload in uploads.items():
+        for upload_slot, upload in uploads.items():
             if upload is None:
                 continue
-            suffix = Path(upload.filename or "").suffix or ".xlsx"
+            upload_filename = unicodedata.normalize("NFC", Path(upload.filename or "").name)
+            platform = _detect_platform(upload_filename)
+            if platform is None:
+                raise ValueError(
+                    f"파일의 플랫폼을 확인할 수 없습니다: {upload_filename}. "
+                    "파일명에 네이버, 스마트스토어, 하이버, 배송준비 또는 에이블리가 포함된 원본 주문서를 업로드해주세요."
+                )
+            if saved_paths[platform] is not None:
+                raise ValueError(f"{PLATFORM_LABELS[platform]} 주문서는 한 번에 1개만 업로드해주세요.")
+
+            suffix = Path(upload_filename).suffix or ".xlsx"
             saved_path = temp_dir / f"{platform}{suffix}"
             await _save_upload(upload, saved_path)
             saved_paths[platform] = saved_path
+            logger.info(
+                "Detected %s upload from slot %s: filename=%r",
+                platform,
+                upload_slot,
+                upload_filename,
+            )
 
         filename = f"통합주문서_{datetime.now():%Y%m%d_%H%M%S}_{request_id[:8]}.xlsx"
         output_path = OUTPUT_DIR / filename
